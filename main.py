@@ -14,7 +14,7 @@ def main():
 
     running = True
     while running:
-        dt = clock.tick(FPS)
+        dt_ms = clock.tick(FPS)
 
         for e in pygame.event.get():
             if e.type == pygame.QUIT:
@@ -22,6 +22,7 @@ def main():
             else:
                 game.handle_event(e)
 
+        game.update(dt_ms)
         game.draw(screen)
         pygame.display.flip()
 
