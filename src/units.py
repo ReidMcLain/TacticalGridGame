@@ -1,13 +1,35 @@
+import os
 import pygame
 from dataclasses import dataclass, field
-from .constants import TILE_SIZE, TEAM_RED, TEAM_BLUE, BLACK, WHITE
+from .constants import TILE_SIZE, WHITE, BLACK, TEAM_RED, TEAM_BLUE
 
+# --- GAME UNITS (v0.02) ---
 UNIT_STATS = {
-    "INFANTRY": {"max_hp": 8, "move": 4},
-    "CAVALRY": {"max_hp": 10, "move": 6},
-    "PIKEMAN": {"max_hp": 9, "move": 4},
-    "CROSSBOW": {"max_hp": 7, "move": 4},
+    "POTION": {"max_hp": 100, "move": 4},
+    "SKULL": {"max_hp": 100, "move": 4},
 }
+
+_ASSETS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets")
+
+# sprite cache (loaded AFTER display init)
+_SPRITES = {
+    "POTION": None,
+    "SKULL": None,
+}
+
+def init_assets():
+    """
+    Call this AFTER pygame.display.set_mode(...)
+    """
+    def load(filename):
+        path = os.path.join(_ASSETS_DIR, filename)
+        img = pygame.image.load(path).convert_alpha()
+        # crisp pixel scaling (no blur)
+        img = pygame.transform.scale(img, (TILE_SIZE, TILE_SIZE))
+        return img
+
+    _SPRITES["POTION"] = load("Potion.png")
+    _SPRITES["SKULL"] = load("Skull.png")
 
 @dataclass
 class Unit:
@@ -17,8 +39,6 @@ class Unit:
     y: int
     hp: int
     acted: bool = False
-    has_attacked: bool = False
-    move_left: int = 0
 
     moving: bool = False
     _path: list = field(default_factory=list)
@@ -32,7 +52,6 @@ class Unit:
         self._py = float(self.y * TILE_SIZE + TILE_SIZE // 2)
         self._target_px = self._px
         self._target_py = self._py
-        self.move_left = self.move_points
 
     @property
     def max_hp(self):
@@ -47,14 +66,6 @@ class Unit:
 
     def is_alive(self):
         return self.hp > 0
-
-    def damage(self):
-        return max(1, self.hp)
-
-    def begin_turn(self):
-        self.acted = False
-        self.has_attacked = False
-        self.move_left = self.move_points
 
     def _cell_center(self, x, y):
         return (x * TILE_SIZE + TILE_SIZE // 2, y * TILE_SIZE + TILE_SIZE // 2)
@@ -101,28 +112,38 @@ class Unit:
         self._py += (dy / dist) * step
 
     def draw(self, surf, font_small):
-        color = TEAM_RED if self.team == 0 else TEAM_BLUE
         cx = int(self._px)
         cy = int(self._py)
 
-        radius = TILE_SIZE // 3
-        if self.acted:
-            radius = TILE_SIZE // 4
+        img = _SPRITES.get(self.kind)
+        if img is not None:
+            surf.blit(img, img.get_rect(center=(cx, cy)))
+        else:
+            # if assets weren't initialized, show a simple fallback (not circles)
+            color = TEAM_RED if self.team == 0 else TEAM_BLUE
+            r = pygame.Rect(0, 0, TILE_SIZE - 20, TILE_SIZE - 20)
+            r.center = (cx, cy)
+            pygame.draw.rect(surf, color, r)
 
-        pygame.draw.circle(surf, color, (cx, cy), radius)
-        pygame.draw.circle(surf, BLACK, (cx, cy), radius, 2)
-
+        # HP label ABOVE sprite
         hp_txt = font_small.render(str(self.hp), True, WHITE)
-        rect = hp_txt.get_rect(center=(cx, cy))
-        surf.blit(hp_txt, rect)
+        hp_rect = hp_txt.get_rect(center=(cx, cy - TILE_SIZE // 2 + 12))
+        outline = hp_rect.inflate(6, 4)
+        pygame.draw.rect(surf, BLACK, outline, border_radius=4)
+        surf.blit(hp_txt, hp_rect)
 
 def team_name(team):
     return "RED" if team == 0 else "BLUE"
 
 def make_starting_units():
     units = []
-    units.append(Unit(team=0, kind="INFANTRY", x=0, y=3, hp=UNIT_STATS["INFANTRY"]["max_hp"]))
-    units.append(Unit(team=0, kind="CAVALRY", x=1, y=0, hp=UNIT_STATS["CAVALRY"]["max_hp"]))
-    units.append(Unit(team=1, kind="INFANTRY", x=5, y=1, hp=UNIT_STATS["INFANTRY"]["max_hp"]))
-    units.append(Unit(team=1, kind="CROSSBOW", x=4, y=5, hp=UNIT_STATS["CROSSBOW"]["max_hp"]))
+
+    # RED: 2 potions
+    units.append(Unit(team=0, kind="POTION", x=0, y=3, hp=UNIT_STATS["POTION"]["max_hp"]))
+    units.append(Unit(team=0, kind="POTION", x=1, y=0, hp=UNIT_STATS["POTION"]["max_hp"]))
+
+    # BLUE: 2 skulls
+    units.append(Unit(team=1, kind="SKULL", x=5, y=1, hp=UNIT_STATS["SKULL"]["max_hp"]))
+    units.append(Unit(team=1, kind="SKULL", x=4, y=5, hp=UNIT_STATS["SKULL"]["max_hp"]))
+
     return units

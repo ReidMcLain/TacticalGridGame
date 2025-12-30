@@ -1,3 +1,5 @@
+import os
+
 GRID_W = 6
 GRID_H = 6
 TILE_SIZE = 96
@@ -33,3 +35,6 @@ TILES = {
     "HILL": {"move_cost": 2, "def_bonus": 2},
     "WATER": {"move_cost": 999, "def_bonus": 0},
 }
+
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+ASSETS_DIR = os.path.join(BASE_DIR, "assets")

@@ -18,6 +18,15 @@ class Game:
         self.animating_unit = None
         self.winner = None
 
+        self.in_ai_turn = False
+
+        self.log_lines = deque(maxlen=4)
+        self._log(f"Game start. Turn: {team_name(self.turn_team)}")
+
+    def _log(self, msg):
+        print(msg)
+        self.log_lines.appendleft(msg)
+
     def units_alive(self, team):
         return [u for u in self.units if u.team == team and u.is_alive()]
 
@@ -91,6 +100,9 @@ class Game:
         elif not self.units_alive(1):
             self.winner = 0
 
+        if self.winner is not None:
+            self._log(f"{team_name(self.winner)} wins!")
+
     def check_auto_end_turn(self):
         for u in self.units:
             if u.team == self.turn_team and u.is_alive() and not u.acted:
@@ -102,18 +114,26 @@ class Game:
         unit.acted = True
         unit.has_moved = False
         self.clear_selection()
+
         self.check_win()
-        if self.winner is None:
+        if self.winner is not None:
+            return
+
+        # IMPORTANT: during AI processing, do NOT auto-end turns here.
+        if not self.in_ai_turn:
             self.check_auto_end_turn()
 
     def end_turn(self):
         self.clear_selection()
         self.turn_team = 1 - self.turn_team
+
         for u in self.units:
             if u.team == self.turn_team:
                 self.ensure_flags(u)
                 u.acted = False
                 u.has_moved = False
+
+        self._log(f"Turn: {team_name(self.turn_team)}")
 
         if self.turn_team == AI_TEAM and self.winner is None:
             self.run_ai_turn()
@@ -124,8 +144,22 @@ class Game:
         if attacker.acted:
             return
 
-        dmg = max(1, attacker.damage() - self.grid.def_bonus(defender.x, defender.y))
+        before = defender.hp
+        base = int(attacker.hp * 0.40)  # 40% of CURRENT hp (shared hp/attack pool idea)
+        dmg = max(1, base - self.grid.def_bonus(defender.x, defender.y))
+
         defender.hp -= dmg
+        if defender.hp < 0:
+            defender.hp = 0
+
+        self._log(
+            f"{team_name(attacker.team)} {attacker.kind} attacked "
+            f"{team_name(defender.team)} {defender.kind} for {dmg} ({before}->{defender.hp})"
+        )
+
+        if defender.hp <= 0:
+            self._log(f"{team_name(defender.team)} {defender.kind} died.")
+
         self.finish_unit_turn(attacker)
 
     def try_select(self, cell):
@@ -187,9 +221,14 @@ class Game:
                 self.try_select(cell)
 
     def run_ai_turn(self):
+        if self.winner is not None:
+            return
+
+        self.in_ai_turn = True
+
         for unit in self.units_alive(AI_TEAM):
             self.ensure_flags(unit)
-            if unit.acted:
+            if unit.acted or not unit.is_alive():
                 continue
 
             self.selected = unit
@@ -197,17 +236,23 @@ class Game:
 
             if self.attackables:
                 self.attack(unit, self.unit_at(*next(iter(self.attackables))))
+                if self.winner is not None:
+                    self.in_ai_turn = False
+                    return
                 continue
 
             enemies = self.units_alive(0)
             if not enemies:
                 self.finish_unit_turn(unit)
+                if self.winner is not None:
+                    self.in_ai_turn = False
+                    return
                 continue
 
             best_cell = None
             best_dist = 10**9
             for e in enemies:
-                for c in self.reachable if self.reachable else {unit.pos()}:
+                for c in (self.reachable if self.reachable else {unit.pos()}):
                     d = abs(e.x - c[0]) + abs(e.y - c[1])
                     if d < best_dist:
                         best_dist = d
@@ -219,10 +264,15 @@ class Game:
                     unit.start_path(path)
                     unit.has_moved = True
                     self.animating_unit = unit
+                    # AI will resume after movement finishes in update()
                     return
 
             self.finish_unit_turn(unit)
+            if self.winner is not None:
+                self.in_ai_turn = False
+                return
 
+        self.in_ai_turn = False
         self.end_turn()
 
     def ai_after_move(self, unit):
@@ -231,12 +281,9 @@ class Game:
 
         if self.attackables:
             self.attack(unit, self.unit_at(*next(iter(self.attackables))))
-            self.run_ai_turn()
             return
 
         self.finish_unit_turn(unit)
-        if self.winner is None and self.turn_team == AI_TEAM:
-            self.run_ai_turn()
 
     def update(self, dt_ms):
         if self.animating_unit:
@@ -247,6 +294,11 @@ class Game:
 
                 if moved_unit.team == AI_TEAM:
                     self.ai_after_move(moved_unit)
+                    if self.winner is not None:
+                        self.in_ai_turn = False
+                        return
+                    # continue AI loop after its move resolves
+                    self.run_ai_turn()
                     return
 
                 self.selected = moved_unit
@@ -281,5 +333,11 @@ class Game:
             if u.is_alive():
                 u.draw(surf, self.ui.small)
 
-        label = f"Turn: {team_name(self.turn_team)}" if self.winner is None else f"{team_name(self.winner)} wins"
-        self.ui.draw_panel(surf, [label])
+        label = (
+            f"Turn: {team_name(self.turn_team)}"
+            if self.winner is None
+            else f"{team_name(self.winner)} wins"
+        )
+
+        panel_lines = [label] + list(self.log_lines)
+        self.ui.draw_panel(surf, panel_lines)

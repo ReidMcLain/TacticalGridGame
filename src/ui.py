@@ -13,7 +13,8 @@ class UI:
 
         y = panel.y + 10
         for i, line in enumerate(lines):
-            f = self.font if i == 0 else self.small
-            txt = f.render(line, True, WHITE if i == 0 else GRAY)
+            font = self.font if i == 0 else self.small
+            color = WHITE if i == 0 else GRAY
+            txt = font.render(line, True, color)
             surf.blit(txt, (12, y))
-            y += 26
+            y += 24
