@@ -1,8 +1,8 @@
 import os
 
-GRID_W = 6
-GRID_H = 6
-TILE_SIZE = 96
+GRID_W = 20
+GRID_H = 10
+TILE_SIZE = 64
 
 SCREEN_W = GRID_W * TILE_SIZE
 UI_H = 120

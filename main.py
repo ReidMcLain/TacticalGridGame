@@ -2,7 +2,7 @@ import pygame
 from src.constants import SCREEN_W, SCREEN_H, FPS
 from src.ui import UI
 from src.game import Game
-from src.units import init_assets  # <-- make sure units.py defines this
+from src.units import init_assets
 
 
 def main():
@@ -11,7 +11,6 @@ def main():
     pygame.display.set_caption("GRIDS v0.02")
     clock = pygame.time.Clock()
 
-    # IMPORTANT: load/convert sprites AFTER display is created
     init_assets()
 
     ui = UI()

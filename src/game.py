@@ -6,6 +6,11 @@ from .constants import TILE_SIZE, BLACK, HIGHLIGHT_MOVE, HIGHLIGHT_ATTACK, HIGHL
 
 AI_TEAM = 1
 
+AI_DELAY_UNIT_START_MS = 300
+AI_DELAY_AFTER_MOVE_MS = 300
+AI_DELAY_BETWEEN_UNITS_MS = 300
+
+
 class Game:
     def __init__(self, ui):
         self.ui = ui
@@ -19,6 +24,10 @@ class Game:
         self.winner = None
 
         self.in_ai_turn = False
+        self.ai_queue = deque()
+        self.ai_timer_ms = 0
+        self.ai_phase = "idle"
+        self.ai_current = None
 
         self.log_lines = deque(maxlen=4)
         self._log(f"Game start. Turn: {team_name(self.turn_team)}")
@@ -39,6 +48,9 @@ class Game:
     def occupied_cells(self):
         return {(u.x, u.y) for u in self.units if u.is_alive()}
 
+    def enemy_occupied_cells(self, team):
+        return {(u.x, u.y) for u in self.units if u.is_alive() and u.team != team}
+
     def clear_selection(self):
         self.selected = None
         self.reachable = set()
@@ -51,7 +63,9 @@ class Game:
     def find_path(self, start, goal):
         q = deque([start])
         came_from = {start: None}
-        blocked = self.occupied_cells() - {start}
+        moving_unit = self.unit_at(*start)
+        moving_team = moving_unit.team if moving_unit else self.turn_team
+        blocked = self.enemy_occupied_cells(moving_team) - {start}
 
         while q:
             x, y = q.popleft()
@@ -84,8 +98,11 @@ class Game:
         if unit.has_moved:
             self.reachable = set()
         else:
-            blocked = self.occupied_cells() - {unit.pos()}
+            blocked = self.enemy_occupied_cells(unit.team) - {unit.pos()}
             self.reachable = self.grid.reachable_cells(unit.pos(), unit.move_points, blocked)
+
+            occupied = self.occupied_cells() - {unit.pos()}
+            self.reachable = self.reachable - occupied
 
         self.attackables = set()
         ux, uy = unit.pos()
@@ -119,9 +136,18 @@ class Game:
         if self.winner is not None:
             return
 
-        # IMPORTANT: during AI processing, do NOT auto-end turns here.
         if not self.in_ai_turn:
             self.check_auto_end_turn()
+
+    def start_ai_turn(self):
+        if self.winner is not None:
+            return
+
+        self.in_ai_turn = True
+        self.ai_queue = deque([u for u in self.units_alive(AI_TEAM) if not u.acted])
+        self.ai_timer_ms = AI_DELAY_UNIT_START_MS
+        self.ai_phase = "next_unit"
+        self.ai_current = None
 
     def end_turn(self):
         self.clear_selection()
@@ -136,7 +162,7 @@ class Game:
         self._log(f"Turn: {team_name(self.turn_team)}")
 
         if self.turn_team == AI_TEAM and self.winner is None:
-            self.run_ai_turn()
+            self.start_ai_turn()
 
     def attack(self, attacker, defender):
         if not attacker or not defender:
@@ -145,7 +171,7 @@ class Game:
             return
 
         before = defender.hp
-        base = int(attacker.hp * 0.40)  # 40% of CURRENT hp (shared hp/attack pool idea)
+        base = int(attacker.hp * 0.40)
         dmg = max(1, base - self.grid.def_bonus(defender.x, defender.y))
 
         defender.hp -= dmg
@@ -156,6 +182,8 @@ class Game:
             f"{team_name(attacker.team)} {attacker.kind} attacked "
             f"{team_name(defender.team)} {defender.kind} for {dmg} ({before}->{defender.hp})"
         )
+
+        attacker.start_attack_anim()
 
         if defender.hp <= 0:
             self._log(f"{team_name(defender.team)} {defender.kind} died.")
@@ -183,6 +211,10 @@ class Game:
         if not self.selected:
             return
         if self.animating_unit:
+            return
+
+        if cell == self.selected.pos():
+            self.clear_selection()
             return
 
         self.ensure_flags(self.selected)
@@ -220,16 +252,52 @@ class Game:
             else:
                 self.try_select(cell)
 
-    def run_ai_turn(self):
+    def update_ai(self, dt_ms):
         if self.winner is not None:
+            self.in_ai_turn = False
+            self.ai_phase = "idle"
+            self.ai_current = None
+            self.ai_queue.clear()
             return
 
-        self.in_ai_turn = True
+        if not self.in_ai_turn:
+            self.start_ai_turn()
+            return
 
-        for unit in self.units_alive(AI_TEAM):
-            self.ensure_flags(unit)
-            if unit.acted or not unit.is_alive():
-                continue
+        if self.animating_unit is not None:
+            return
+
+        if self.ai_timer_ms > 0:
+            self.ai_timer_ms -= int(dt_ms)
+            if self.ai_timer_ms > 0:
+                return
+            self.ai_timer_ms = 0
+
+        if self.ai_phase == "next_unit":
+            while self.ai_queue:
+                u = self.ai_queue.popleft()
+                if u.is_alive() and not u.acted:
+                    self.ai_current = u
+                    self.selected = u
+                    self.ensure_flags(u)
+                    self.compute_reachable_and_attackables(u)
+                    self.ai_phase = "act"
+                    self.ai_timer_ms = AI_DELAY_UNIT_START_MS
+                    return
+
+            self.in_ai_turn = False
+            self.ai_phase = "idle"
+            self.ai_current = None
+            self.end_turn()
+            return
+
+        if self.ai_phase == "post_move":
+            unit = self.ai_current
+            if unit is None or (not unit.is_alive()) or unit.acted:
+                self.ai_current = None
+                self.ai_phase = "next_unit"
+                self.ai_timer_ms = AI_DELAY_BETWEEN_UNITS_MS
+                return
 
             self.selected = unit
             self.compute_reachable_and_attackables(unit)
@@ -238,16 +306,49 @@ class Game:
                 self.attack(unit, self.unit_at(*next(iter(self.attackables))))
                 if self.winner is not None:
                     self.in_ai_turn = False
+                    self.ai_phase = "idle"
                     return
-                continue
+            else:
+                self.finish_unit_turn(unit)
+
+            self.ai_current = None
+            self.ai_phase = "next_unit"
+            self.ai_timer_ms = AI_DELAY_BETWEEN_UNITS_MS
+            return
+
+        if self.ai_phase == "act":
+            unit = self.ai_current
+            if unit is None or (not unit.is_alive()) or unit.acted:
+                self.ai_current = None
+                self.ai_phase = "next_unit"
+                self.ai_timer_ms = AI_DELAY_BETWEEN_UNITS_MS
+                return
+
+            self.selected = unit
+            self.compute_reachable_and_attackables(unit)
+
+            if self.attackables:
+                self.attack(unit, self.unit_at(*next(iter(self.attackables))))
+                if self.winner is not None:
+                    self.in_ai_turn = False
+                    self.ai_phase = "idle"
+                    return
+                self.ai_current = None
+                self.ai_phase = "next_unit"
+                self.ai_timer_ms = AI_DELAY_BETWEEN_UNITS_MS
+                return
 
             enemies = self.units_alive(0)
             if not enemies:
                 self.finish_unit_turn(unit)
                 if self.winner is not None:
                     self.in_ai_turn = False
+                    self.ai_phase = "idle"
                     return
-                continue
+                self.ai_current = None
+                self.ai_phase = "next_unit"
+                self.ai_timer_ms = AI_DELAY_BETWEEN_UNITS_MS
+                return
 
             best_cell = None
             best_dist = 10**9
@@ -264,28 +365,25 @@ class Game:
                     unit.start_path(path)
                     unit.has_moved = True
                     self.animating_unit = unit
-                    # AI will resume after movement finishes in update()
+                    self.ai_phase = "moving"
                     return
 
             self.finish_unit_turn(unit)
             if self.winner is not None:
                 self.in_ai_turn = False
+                self.ai_phase = "idle"
                 return
 
-        self.in_ai_turn = False
-        self.end_turn()
-
-    def ai_after_move(self, unit):
-        self.selected = unit
-        self.compute_reachable_and_attackables(unit)
-
-        if self.attackables:
-            self.attack(unit, self.unit_at(*next(iter(self.attackables))))
+            self.ai_current = None
+            self.ai_phase = "next_unit"
+            self.ai_timer_ms = AI_DELAY_BETWEEN_UNITS_MS
             return
 
-        self.finish_unit_turn(unit)
-
     def update(self, dt_ms):
+        for u in self.units:
+            if u.is_alive():
+                u.update_attack(dt_ms)
+
         if self.animating_unit:
             self.animating_unit.update(dt_ms)
             if not self.animating_unit.moving:
@@ -293,12 +391,11 @@ class Game:
                 self.animating_unit = None
 
                 if moved_unit.team == AI_TEAM:
-                    self.ai_after_move(moved_unit)
-                    if self.winner is not None:
-                        self.in_ai_turn = False
-                        return
-                    # continue AI loop after its move resolves
-                    self.run_ai_turn()
+                    self.ai_current = moved_unit
+                    self.selected = moved_unit
+                    self.compute_reachable_and_attackables(moved_unit)
+                    self.ai_phase = "post_move"
+                    self.ai_timer_ms = AI_DELAY_AFTER_MOVE_MS
                     return
 
                 self.selected = moved_unit
@@ -306,8 +403,18 @@ class Game:
 
                 if not self.attackables:
                     self.finish_unit_turn(moved_unit)
+                return
+
+        if self.turn_team == AI_TEAM and self.winner is None:
+            self.update_ai(dt_ms)
 
     def draw_highlights(self, surf):
+        if self.turn_team == AI_TEAM:
+            return
+
+        if self.selected and self.selected.team != self.turn_team:
+            return
+
         for x, y in self.reachable:
             r = self.grid.cell_rect(x, y)
             overlay = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
@@ -331,7 +438,7 @@ class Game:
 
         for u in self.units:
             if u.is_alive():
-                u.draw(surf, self.ui.small)
+                u.draw(surf, self.ui.small, self.turn_team)
 
         label = (
             f"Turn: {team_name(self.turn_team)}"
