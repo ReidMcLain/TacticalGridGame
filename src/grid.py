@@ -11,17 +11,21 @@ class Grid:
 
     def _seed_map(self):
         preset = [
-            ["PLAIN","PLAIN","FOREST","PLAIN","HILL","PLAIN","PLAIN","FOREST","PLAIN","PLAIN","PLAIN","FOREST","PLAIN","HILL","PLAIN","PLAIN","FOREST","PLAIN","PLAIN","PLAIN"],
-            ["PLAIN","WATER","WATER","PLAIN","HILL","PLAIN","PLAIN","FOREST","PLAIN","PLAIN","PLAIN","WATER","WATER","PLAIN","HILL","PLAIN","PLAIN","FOREST","PLAIN","PLAIN"],
-            ["PLAIN","PLAIN","FOREST","PLAIN","PLAIN","PLAIN","HILL","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","FOREST","PLAIN","PLAIN","HILL","PLAIN","PLAIN","PLAIN","PLAIN"],
-            ["HILL","PLAIN","PLAIN","PLAIN","FOREST","PLAIN","HILL","PLAIN","FOREST","PLAIN","PLAIN","PLAIN","FOREST","PLAIN","HILL","PLAIN","PLAIN","FOREST","PLAIN","PLAIN"],
-            ["PLAIN","PLAIN","PLAIN","WATER","WATER","PLAIN","PLAIN","PLAIN","FOREST","PLAIN","PLAIN","PLAIN","WATER","WATER","PLAIN","PLAIN","PLAIN","FOREST","PLAIN","PLAIN"],
-            ["PLAIN","HILL","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","WATER","WATER","PLAIN","PLAIN","HILL","PLAIN","PLAIN","PLAIN","PLAIN","WATER","WATER","PLAIN","PLAIN"],
-            ["PLAIN","PLAIN","FOREST","PLAIN","HILL","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","FOREST","PLAIN","HILL","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN"],
-            ["PLAIN","WATER","PLAIN","PLAIN","PLAIN","FOREST","PLAIN","HILL","PLAIN","PLAIN","PLAIN","WATER","PLAIN","PLAIN","FOREST","PLAIN","HILL","PLAIN","PLAIN","PLAIN"],
-            ["PLAIN","PLAIN","PLAIN","HILL","PLAIN","PLAIN","FOREST","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","HILL","PLAIN","PLAIN","FOREST","PLAIN","PLAIN","PLAIN","PLAIN"],
-            ["PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","HILL","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","HILL","PLAIN","PLAIN"],
+            ["PLAIN","PLAIN","FOREST","PLAIN","HILL","PLAIN","PLAIN","FOREST","PLAIN","PLAIN"],
+            ["PLAIN","WATER","WATER","PLAIN","HILL","PLAIN","PLAIN","FOREST","PLAIN","PLAIN"],
+            ["PLAIN","PLAIN","FOREST","PLAIN","PLAIN","PLAIN","HILL","PLAIN","PLAIN","PLAIN"],
+            ["HILL","PLAIN","PLAIN","PLAIN","FOREST","PLAIN","HILL","PLAIN","FOREST","PLAIN"],
+            ["PLAIN","PLAIN","PLAIN","WATER","WATER","PLAIN","PLAIN","PLAIN","FOREST","PLAIN"],
+            ["PLAIN","HILL","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","WATER","WATER","PLAIN"],
+            ["PLAIN","PLAIN","FOREST","PLAIN","HILL","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN"],
+            ["PLAIN","WATER","PLAIN","PLAIN","PLAIN","FOREST","PLAIN","HILL","PLAIN","PLAIN"],
+            ["PLAIN","PLAIN","PLAIN","HILL","PLAIN","PLAIN","FOREST","PLAIN","PLAIN","PLAIN"],
+            ["PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","HILL","PLAIN"],
         ]
+
+        self.h = len(preset)
+        self.w = len(preset[0]) if self.h else 0
+        self.tiles = [["PLAIN" for _ in range(self.w)] for _ in range(self.h)]
 
         for y in range(self.h):
             for x in range(self.w):

@@ -1,7 +1,7 @@
 import pygame
 from collections import deque
 from .grid import Grid
-from .units import make_starting_units, team_name
+from .units import make_starting_units, team_name, get_arrow_sprite
 from .constants import TILE_SIZE, BLACK, HIGHLIGHT_MOVE, HIGHLIGHT_ATTACK, HIGHLIGHT_SELECT
 
 AI_TEAM = 1
@@ -9,7 +9,10 @@ AI_TEAM = 1
 AI_DELAY_UNIT_START_MS = 300
 AI_DELAY_AFTER_MOVE_MS = 300
 AI_DELAY_BETWEEN_UNITS_MS = 300
-
+ARROW_SPEED_PX_PER_MS = 0.1
+ARROW_MAX_LIFE_MS = 2000
+ARROW_SPAWN_OX = 10
+ARROW_SPAWN_OY = -7
 
 class Game:
     def __init__(self, ui):
@@ -22,6 +25,7 @@ class Game:
         self.attackables = set()
         self.animating_unit = None
         self.winner = None
+        self.projectiles = []
 
         self.in_ai_turn = False
         self.ai_queue = deque()
@@ -106,10 +110,15 @@ class Game:
 
         self.attackables = set()
         ux, uy = unit.pos()
-        for nx, ny in self.grid.neighbors4(ux, uy):
-            enemy = self.unit_at(nx, ny)
-            if enemy and enemy.team != unit.team:
-                self.attackables.add((nx, ny))
+
+        attack_range = unit.attack_range
+
+        for x in range(self.grid.w):
+            for y in range(self.grid.h):
+                if abs(x - ux) + abs(y - uy) <= attack_range and (x, y) != (ux, uy):
+                    enemy = self.unit_at(x, y)
+                    if enemy and enemy.team != unit.team:
+                        self.attackables.add((x, y))
 
     def check_win(self):
         if not self.units_alive(0):
@@ -164,6 +173,39 @@ class Game:
         if self.turn_team == AI_TEAM and self.winner is None:
             self.start_ai_turn()
 
+    def spawn_arrow_projectile(self, attacker, defender):
+        sx = float(attacker._px + ARROW_SPAWN_OX)
+        sy = float(attacker._py + ARROW_SPAWN_OY)
+
+        tx = float(defender.x * TILE_SIZE + TILE_SIZE // 2)
+        ty = float(defender.y * TILE_SIZE + TILE_SIZE // 2 + ARROW_SPAWN_OY)
+
+        dx = tx - sx
+        dy = ty - sy
+        dist = (dx * dx + dy * dy) ** 0.5
+        if dist <= 0:
+            return
+
+        vx = (dx / dist) * ARROW_SPEED_PX_PER_MS
+        vy = (dy / dist) * ARROW_SPEED_PX_PER_MS
+
+        img = get_arrow_sprite(dx, dy)
+        if not img:
+            return
+
+        self.projectiles.append(
+            {
+                "x": sx,
+                "y": sy,
+                "tx": tx,
+                "ty": ty,
+                "vx": vx,
+                "vy": vy,
+                "life": 0,
+                "img": img,
+            }
+        )
+
     def attack(self, attacker, defender):
         if not attacker or not defender:
             return
@@ -171,8 +213,9 @@ class Game:
             return
 
         before = defender.hp
-        base = int(attacker.hp * 0.40)
-        dmg = max(1, base - self.grid.def_bonus(defender.x, defender.y))
+        base = attacker.atk
+        mitigation = defender.armor + self.grid.def_bonus(defender.x, defender.y)
+        dmg = max(1, base - mitigation)
 
         defender.hp -= dmg
         if defender.hp < 0:
@@ -184,6 +227,10 @@ class Game:
         )
 
         attacker.start_attack_anim()
+
+        if attacker.kind == "ARCHER":
+            self.spawn_arrow_projectile(attacker, defender)
+
 
         if defender.hp <= 0:
             self._log(f"{team_name(defender.team)} {defender.kind} died.")
@@ -380,6 +427,21 @@ class Game:
             return
 
     def update(self, dt_ms):
+        if self.projectiles:
+            dead = []
+            for i, p in enumerate(self.projectiles):
+                p["life"] += int(dt_ms)
+                p["x"] += p["vx"] * dt_ms
+                p["y"] += p["vy"] * dt_ms
+
+                dx = p["tx"] - p["x"]
+                dy = p["ty"] - p["y"]
+                if (dx * dx + dy * dy) <= 4 or p["life"] >= ARROW_MAX_LIFE_MS:
+                    dead.append(i)
+
+            for i in reversed(dead):
+                self.projectiles.pop(i)
+
         for u in self.units:
             if u.is_alive():
                 u.update_attack(dt_ms)
@@ -439,6 +501,10 @@ class Game:
         for u in self.units:
             if u.is_alive():
                 u.draw(surf, self.ui.small, self.turn_team)
+
+        for p in self.projectiles:
+            img = p["img"]
+            surf.blit(img, img.get_rect(center=(int(p["x"]), int(p["y"])))) 
 
         label = (
             f"Turn: {team_name(self.turn_team)}"
