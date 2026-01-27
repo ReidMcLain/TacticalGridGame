@@ -1,35 +1,71 @@
 import pygame
+import os
 from collections import deque
-from .constants import GRID_W, GRID_H, TILE_SIZE, TILE_COLORS, TILES, BLACK
+from .constants import GRID_W, GRID_H, TILE_SIZE, SUBTILE_SIZE, TILES, ASSETS_DIR
 
 class Grid:
     def __init__(self):
         self.w = GRID_W
         self.h = GRID_H
         self.tiles = [["PLAIN" for _ in range(self.w)] for _ in range(self.h)]
+        self.paint_w = self.w * 2
+        self.paint_h = self.h * 2
+        self.paint = [["P" for _ in range(self.paint_w)] for _ in range(self.paint_h)]
         self._seed_map()
+        self._load_tiles()
+
+    def _load_tiles(self):
+        def load(name):
+            img = pygame.image.load(os.path.join(ASSETS_DIR, name))
+            if img.get_width() != SUBTILE_SIZE or img.get_height() != SUBTILE_SIZE:
+                img = pygame.transform.scale(img, (SUBTILE_SIZE, SUBTILE_SIZE))
+            return img
+
+        self.subtiles = {
+            "P": load("grassy-plain.png"),
+            "D": load("dirt.png"),
+            "T": load("top-grass-dirt.png"),
+            "B": load("bottom-grass-dirt.png"),
+            "L": load("left-grass-dirt.png"),
+            "R": load("right-grass-dirt.png"),
+            "TL": load("top-left-grass-dirt.png"),
+            "TR": load("top-right-grass-dirt.png"),
+            "BL": load("bottom-left-grass-dirt.png"),
+            "BR": load("bottom-right-grass-dirt.png"),
+        }
 
     def _seed_map(self):
-        preset = [
-            ["PLAIN","PLAIN","FOREST","PLAIN","HILL","PLAIN","PLAIN","FOREST","PLAIN","PLAIN"],
-            ["PLAIN","WATER","WATER","PLAIN","HILL","PLAIN","PLAIN","FOREST","PLAIN","PLAIN"],
-            ["PLAIN","PLAIN","FOREST","PLAIN","PLAIN","PLAIN","HILL","PLAIN","PLAIN","PLAIN"],
-            ["HILL","PLAIN","PLAIN","PLAIN","FOREST","PLAIN","HILL","PLAIN","FOREST","PLAIN"],
-            ["PLAIN","PLAIN","PLAIN","WATER","WATER","PLAIN","PLAIN","PLAIN","FOREST","PLAIN"],
-            ["PLAIN","HILL","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","WATER","WATER","PLAIN"],
-            ["PLAIN","PLAIN","FOREST","PLAIN","HILL","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN"],
-            ["PLAIN","WATER","PLAIN","PLAIN","PLAIN","FOREST","PLAIN","HILL","PLAIN","PLAIN"],
-            ["PLAIN","PLAIN","PLAIN","HILL","PLAIN","PLAIN","FOREST","PLAIN","PLAIN","PLAIN"],
-            ["PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","PLAIN","HILL","PLAIN"],
-        ]
-
-        self.h = len(preset)
-        self.w = len(preset[0]) if self.h else 0
+        self.w = GRID_W
+        self.h = GRID_H
         self.tiles = [["PLAIN" for _ in range(self.w)] for _ in range(self.h)]
+        self.paint_w = self.w * 2
+        self.paint_h = self.h * 2
 
-        for y in range(self.h):
-            for x in range(self.w):
-                self.tiles[y][x] = preset[y][x]
+        rows = [
+            "P P P P P P P P P P P P P P P P P P P P",
+            "P P P P P P P P P P P P P P P P P P P P",
+            "P P TL T T T T T T T T T T T T T T TR P P",
+            "P P L D D D D D D D D D D D D D D R P P",
+            "P P L D D D D D D D D D D D D D D R P P",
+            "P P L D D D D D D D D D D D D D D R P P",
+            "P P L D D D D D D D D D D D D D D R P P",
+            "P P L D D D D D D D D D D D D D D R P P",
+            "P P L D D D D D D D D D D D D D D R P P",
+            "P P L D D D D D D D D D D D D D D R P P",
+            "P P L D D D D D D D D D D D D D D R P P",
+            "P P L D D D D D D D D D D D D D D R P P",
+            "P P L D D D D D D D D D D D D D D R P P",
+            "P P L D D D D D D D D D D D D D D R P P",
+            "P P L D D D D D D D D D D D D D D R P P",
+            "P P L D D D D D D D D D D D D D D R P P",
+            "P P L D D D D D D D D D D D D D D R P P",
+            "P P BL B B B B B B B B B B B B B B BR P P",
+            "P P P P P P P P P P P P P P P P P P P P",
+            "P P P P P P P P P P P P P P P P P P P P",
+        ]
+        preset = [r.split() for r in rows]
+        self.paint = preset
+
 
     def in_bounds(self, x, y):
         return 0 <= x < self.w and 0 <= y < self.h
@@ -66,14 +102,31 @@ class Grid:
     def draw(self, surf):
         for y in range(self.h):
             for x in range(self.w):
-                t = self.tile_type(x, y)
                 r = self.cell_rect(x, y)
-                pygame.draw.rect(surf, TILE_COLORS[t], r)
-                pygame.draw.rect(surf, BLACK, r, 1)
+                px = x * 2
+                py = y * 2
+
+                k_tl = self.paint[py][px]
+                k_tr = self.paint[py][px + 1]
+                k_bl = self.paint[py + 1][px]
+                k_br = self.paint[py + 1][px + 1]
+
+                tl = self.subtiles.get(k_tl, self.subtiles["P"])
+                tr = self.subtiles.get(k_tr, self.subtiles["P"])
+                bl = self.subtiles.get(k_bl, self.subtiles["P"])
+                br = self.subtiles.get(k_br, self.subtiles["P"])
+
+                ox = r.left
+                oy = r.top
+
+                surf.blit(tl, (ox, oy))
+                surf.blit(tr, (ox + SUBTILE_SIZE, oy))
+                surf.blit(bl, (ox, oy + SUBTILE_SIZE))
+                surf.blit(br, (ox + SUBTILE_SIZE, oy + SUBTILE_SIZE))
 
     def reachable_cells(self, start, move_points, blocked_cells):
         sx, sy = start
-        dist = { (sx, sy): 0 }
+        dist = {(sx, sy): 0}
         q = deque([(sx, sy)])
 
         while q:

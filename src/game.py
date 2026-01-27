@@ -9,7 +9,7 @@ AI_TEAM = 1
 AI_DELAY_UNIT_START_MS = 300
 AI_DELAY_AFTER_MOVE_MS = 300
 AI_DELAY_BETWEEN_UNITS_MS = 300
-ARROW_SPEED_PX_PER_MS = 0.1
+ARROW_SPEED_PX_PER_MS = 0.2
 ARROW_MAX_LIFE_MS = 2000
 ARROW_SPAWN_OX = 10
 ARROW_SPAWN_OY = -7
@@ -213,7 +213,7 @@ class Game:
             return
 
         before = defender.hp
-        base = attacker.atk
+        base = int(round(attacker.hp * (attacker.atk / 100.0)))
         mitigation = defender.armor + self.grid.def_bonus(defender.x, defender.y)
         dmg = max(1, base - mitigation)
 
