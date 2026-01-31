@@ -6,7 +6,7 @@ from src.units import init_assets
 
 def main():
     pygame.init()
-    pygame.display.set_caption("GRIDS v0.00")
+    pygame.display.set_caption("GRIDS v0.1")
     clock = pygame.time.Clock()
 
     ui = UI()

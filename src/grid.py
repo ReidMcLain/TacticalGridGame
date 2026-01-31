@@ -24,6 +24,7 @@ class Grid:
         self.subtiles = {
             "P": load("grassy-plain.png"),
             "D": load("dirt.png"),
+            "W": load("water.png"),
             "T": load("top-grass-dirt.png"),
             "B": load("bottom-grass-dirt.png"),
             "L": load("left-grass-dirt.png"),
@@ -32,7 +33,16 @@ class Grid:
             "TR": load("top-right-grass-dirt.png"),
             "BL": load("bottom-left-grass-dirt.png"),
             "BR": load("bottom-right-grass-dirt.png"),
+            "WT": load("top-grass-water.png"),
+            "WB": load("bottom-grass-water.png"),
+            "WL": load("left-grass-water.png"),
+            "WR": load("right-grass-water.png"),
+            "WTL": load("top-left-grass-water.png"),
+            "WTR": load("top-right-grass-water.png"),
+            "WBL": load("bottom-left-grass-water.png"),
+            "WBR": load("bottom-right-grass-water.png"),
         }
+
 
     def _seed_map(self):
         self.w = GRID_W
@@ -43,29 +53,40 @@ class Grid:
 
         rows = [
             "P P P P P P P P P P P P P P P P P P P P",
+            "P TL T T T T T T T T T T T T T T T TR P",
+            "P L D D D D D D D D D D D D D D D R P",
+            "P L D D D D D D D D D D D D D D D R P",
+            "P L D D D D D D D D D D D D D D D R P",
+            "P BL B B B B B B B B B B B B B B B BR P",
             "P P P P P P P P P P P P P P P P P P P P",
-            "P P TL T T T T T T T T T T T T T T TR P P",
-            "P P L D D D D D D D D D D D D D D R P P",
-            "P P L D D D D D D D D D D D D D D R P P",
-            "P P L D D D D D D D D D D D D D D R P P",
-            "P P L D D D D D D D D D D D D D D R P P",
-            "P P L D D D D D D D D D D D D D D R P P",
-            "P P L D D D D D D D D D D D D D D R P P",
-            "P P L D D D D D D D D D D D D D D R P P",
-            "P P L D D D D D D D D D D D D D D R P P",
-            "P P L D D D D D D D D D D D D D D R P P",
-            "P P L D D D D D D D D D D D D D D R P P",
-            "P P L D D D D D D D D D D D D D D R P P",
-            "P P L D D D D D D D D D D D D D D R P P",
-            "P P L D D D D D D D D D D D D D D R P P",
-            "P P L D D D D D D D D D D D D D D R P P",
-            "P P BL B B B B B B B B B B B B B B BR P P",
+            "P WTL WT WT WT WT WT WT WT WT WT WT WT WT WT WT WT WTR P",
+            "P WL W W W W W W W W W W W W W W W WR P",
+            "P WL W W W W W W W W W W W W W W W WR P",
+            "P WL W W W W W W W W W W W W W W W WR P",
+            "P WBL WB WB WB WB WB WB WB WB WB WB WB WB WB WB WB WBR P",
+            "P P P P P P P P P P P P P P P P P P P P",
+            "P P P P P P P P P P P P P P P P P P P P",
+            "P P P P P P P P P P P P P P P P P P P P",
+            "P P P P P P P P P P P P P P P P P P P P",
+            "P P P P P P P P P P P P P P P P P P P P",
+            "P P P P P P P P P P P P P P P P P P P P",
             "P P P P P P P P P P P P P P P P P P P P",
             "P P P P P P P P P P P P P P P P P P P P",
         ]
-        preset = [r.split() for r in rows]
-        self.paint = preset
 
+        preset = [r.split() for r in rows]
+
+        while len(preset) < self.paint_h:
+            preset.append(["P"] * self.paint_w)
+        preset = preset[:self.paint_h]
+
+        for i in range(len(preset)):
+            if len(preset[i]) < self.paint_w:
+                preset[i] = preset[i] + (["P"] * (self.paint_w - len(preset[i])))
+            else:
+                preset[i] = preset[i][:self.paint_w]
+
+        self.paint = preset
 
     def in_bounds(self, x, y):
         return 0 <= x < self.w and 0 <= y < self.h
