@@ -67,21 +67,30 @@ class Game:
     def find_path(self, start, goal):
         q = deque([start])
         came_from = {start: None}
+
         moving_unit = self.unit_at(*start)
         moving_team = moving_unit.team if moving_unit else self.turn_team
         blocked = self.enemy_occupied_cells(moving_team) - {start}
 
         while q:
             x, y = q.popleft()
+
             if (x, y) == goal:
                 break
+
             for nx, ny in self.grid.neighbors4(x, y):
                 if (nx, ny) in came_from:
                     continue
+
+                if self.grid.edge_blocked(x, y, nx, ny):
+                    continue
+
                 if self.grid.move_cost(nx, ny) >= 999:
                     continue
+
                 if (nx, ny) in blocked:
                     continue
+
                 came_from[(nx, ny)] = (x, y)
                 q.append((nx, ny))
 
@@ -90,9 +99,11 @@ class Game:
 
         path = []
         cur = goal
+
         while cur != start:
             path.append(cur)
             cur = came_from[cur]
+
         path.reverse()
         return path
 
