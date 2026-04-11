@@ -65,6 +65,7 @@ class Game:
             unit.has_moved = False
 
     def find_path(self, start, goal):
+
         q = deque([start])
         came_from = {start: None}
 
@@ -107,6 +108,69 @@ class Game:
         path.reverse()
         return path
 
+    def can_attack_cell(self, attacker, tx, ty):
+        ux, uy = attacker.pos()
+        dist = abs(tx - ux) + abs(ty - uy)
+
+        if dist > attacker.attack_range or dist == 0:
+            return False
+
+        if attacker.attack_range == 1:
+            if dist != 1:
+                return False
+            if self.grid.edge_blocked(ux, uy, tx, ty):
+                return False
+
+        return True
+    
+    def get_attack_positions_against_enemy(self, attacker, enemy):
+        positions = set()
+
+        for x in range(self.grid.w):
+            for y in range(self.grid.h):
+                if (x, y) == enemy.pos():
+                    continue
+
+                occupant = self.unit_at(x, y)
+                if occupant is not None and occupant != attacker:
+                    continue
+
+                original_x, original_y = attacker.x, attacker.y
+                attacker.x, attacker.y = x, y
+                can_attack = self.can_attack_cell(attacker, enemy.x, enemy.y)
+                attacker.x, attacker.y = original_x, original_y
+
+                if can_attack:
+                    positions.add((x, y))
+
+        return positions
+
+    def choose_ai_destination(self, unit, enemies):
+        candidates = set(self.reachable) if self.reachable else set()
+        candidates.add(unit.pos())
+
+        best_cell = None
+        best_score = None
+
+        for cell in candidates:
+            for enemy in enemies:
+                attack_positions = self.get_attack_positions_against_enemy(unit, enemy)
+
+                for attack_pos in attack_positions:
+                    if attack_pos == cell:
+                        score = (0, abs(enemy.x - cell[0]) + abs(enemy.y - cell[1]))
+                    else:
+                        path = self.find_path(cell, attack_pos)
+                        if not path:
+                            continue
+                        score = (len(path), abs(enemy.x - cell[0]) + abs(enemy.y - cell[1]))
+
+                    if best_score is None or score < best_score:
+                        best_score = score
+                        best_cell = cell
+
+        return best_cell
+
     def compute_reachable_and_attackables(self, unit):
         self.ensure_flags(unit)
 
@@ -122,14 +186,14 @@ class Game:
         self.attackables = set()
         ux, uy = unit.pos()
 
-        attack_range = unit.attack_range
-
         for x in range(self.grid.w):
             for y in range(self.grid.h):
-                if abs(x - ux) + abs(y - uy) <= attack_range and (x, y) != (ux, uy):
-                    enemy = self.unit_at(x, y)
-                    if enemy and enemy.team != unit.team:
-                        self.attackables.add((x, y))
+                enemy = self.unit_at(x, y)
+                if not enemy or enemy.team == unit.team:
+                    continue
+
+                if self.can_attack_cell(unit, x, y):
+                    self.attackables.add((x, y))
 
     def check_win(self):
         if not self.units_alive(0):
@@ -408,14 +472,7 @@ class Game:
                 self.ai_timer_ms = AI_DELAY_BETWEEN_UNITS_MS
                 return
 
-            best_cell = None
-            best_dist = 10**9
-            for e in enemies:
-                for c in (self.reachable if self.reachable else {unit.pos()}):
-                    d = abs(e.x - c[0]) + abs(e.y - c[1])
-                    if d < best_dist:
-                        best_dist = d
-                        best_cell = c
+            best_cell = self.choose_ai_destination(unit, enemies)
 
             if best_cell and best_cell != unit.pos():
                 path = self.find_path(unit.pos(), best_cell)
